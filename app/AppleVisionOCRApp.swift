@@ -52,6 +52,8 @@ final class OCRModel: ObservableObject {
     @Published var batchRunning = false
     @Published var overallProgress = 0.0
     @Published var selectedJobID: UUID?
+    // 外观：auto / light / dark（持久化到 UserDefaults）
+    @Published var appearance: String = UserDefaults.standard.string(forKey: "appearance") ?? "auto"
 
     /// 界面里最多预览多少字，再多只写到文件里
     static let previewChars = 2000
@@ -79,6 +81,21 @@ final class OCRModel: ObservableObject {
     var canRun: Bool { !jobs.isEmpty && !running }
     var hasPDF: Bool { jobs.contains { $0.isPDF } }
     var isBatch: Bool { jobs.count > 1 }
+
+    func setAppearance(_ v: String) {
+        appearance = v
+        UserDefaults.standard.set(v, forKey: "appearance")
+        Self.applyAppearance(v)
+    }
+
+    /// 把外观应用到整个应用（窗口、菜单、面板都会跟着变）
+    static func applyAppearance(_ v: String) {
+        switch v {
+        case "light": NSApplication.shared.appearance = NSAppearance(named: .aqua)
+        case "dark":  NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        default:      NSApplication.shared.appearance = nil
+        }
+    }
 
     static func pythonPath() -> String? {
         let home = NSHomeDirectory()
@@ -630,9 +647,21 @@ struct ContentView: View {
     private var sidebar: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("AppleVisionOCR").font(.system(size: 19, weight: .semibold))
-                    Text("本地识别 · 不上传").font(.caption).foregroundStyle(.secondary)
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("AppleVisionOCR").font(.system(size: 19, weight: .semibold))
+                        Text("本地识别 · 不上传").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 4)
+                    Picker("", selection: Binding(get: { m.appearance }, set: { m.setAppearance($0) })) {
+                        Text("跟随系统").tag("auto")
+                        Text("浅色").tag("light")
+                        Text("深色").tag("dark")
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .frame(width: 92)
+                    .help("外观")
                 }
 
                 dropZone
@@ -1012,6 +1041,10 @@ struct AppleVisionOCRApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        OCRModel.applyAppearance(UserDefaults.standard.string(forKey: "appearance") ?? "auto")
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         guard !urls.isEmpty else { return }
         DispatchQueue.main.async { OCRModel.shared?.add(urls) }
@@ -1144,7 +1177,12 @@ enum SelfTest {
             m.status = "已保存 showcase.txt · \(previewBody.count) 字 · 用时 1.8 秒"
             m.preview = previewBody
         }
+        let snapAppearance = ProcessInfo.processInfo.environment["OCRSNAPAPPEARANCE"]
+        if let ap = snapAppearance { m.appearance = ap }
         let v = NSHostingView(rootView: ContentView(m: m))
+        if let ap = snapAppearance {
+            v.appearance = NSAppearance(named: ap == "dark" ? .darkAqua : .aqua)
+        }
         v.frame = CGRect(x: 0, y: 0, width: 960, height: 660)
         v.layoutSubtreeIfNeeded()
         guard let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { print("no rep"); return }

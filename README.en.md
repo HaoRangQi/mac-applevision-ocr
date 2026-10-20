@@ -18,6 +18,7 @@ Built on macOS's built-in **Vision** framework — everything runs on your machi
 - **Reconstructs layout**: splits paragraphs by indentation, continues across pages, turns tables into grids, moves footnotes to the end, and replaces figure captions with placeholders.
 - **Same engine, two front-ends**: the GUI `AppleVisionOCR.app` and the CLI `applevision-ocr` share one pipeline.
 - **Batch queue**: add many files at once, recognize them one by one, each written to its own `.txt`.
+- **Dark mode**: follow the system or switch manually; the choice is remembered.
 
 ## Install
 
@@ -51,6 +52,10 @@ Results are **written straight to a file by default**. The path is editable and 
 **Batch queue**: drop or select several PDFs / images at once and they line up in the left-hand queue, then run one after another. Each file shows its own state (waiting / running / done with N chars / failed) while the bar at the bottom tracks overall progress. Every file is saved as a same-named `.txt` by default, or into a single output directory you pick.
 
 ![Batch queue](docs/screenshot-batch.png)
+
+**Dark mode**: switch between 「follow system / light / dark」 in the top-right corner; the choice is remembered. Every surface uses system semantic colors, so it adapts cleanly in dark mode without any white-on-black mismatch.
+
+![Dark mode](docs/screenshot-dark.png)
 
 ### Command line
 
