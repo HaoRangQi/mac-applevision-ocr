@@ -29,5 +29,17 @@ jobs:
           ./bin/ocrvision --input tests/fixtures/sample.png --scale 4.5 > /dev/null
           echo "engine ok"
 
+      - name: Verify page-spec parsing
+        run: |
+          swiftc -O scripts/make-test-pdf.swift -o bin/make-test-pdf
+          ./bin/make-test-pdf /tmp/pages.pdf
+          [ "$(./bin/ocrvision --input /tmp/pages.pdf --count)" = "4" ]
+          pages=$(./bin/ocrvision --input /tmp/pages.pdf --pages 2,4 --fast 2>&1 >/dev/null | grep -c '^page ')
+          [ "$pages" = "2" ] || { echo "expected 2 pages, got $pages"; exit 1; }
+          ./bin/ocrvision --input /tmp/pages.pdf --pages 2,4 --fast 2>&1 >/dev/null | grep -qx 'page 2'
+          ./bin/ocrvision --input /tmp/pages.pdf --pages 2,4 --fast 2>&1 >/dev/null | grep -qx 'page 4'
+          ! ./bin/ocrvision --input /tmp/pages.pdf --pages 1-5-9 --fast 2>/dev/null >/dev/null
+          echo "page spec ok"
+
       - name: Build app
         run: cd app && ./build.sh

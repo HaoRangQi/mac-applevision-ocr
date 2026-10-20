@@ -95,6 +95,22 @@ def run(
     return out
 
 
+def page_count(path: str) -> int:
+    """Return the number of pages in a PDF, or 1 for images.
+
+    Used to resolve negative/relative page specs (``-10`` = last 10 pages)
+    before handing a concrete page list to the engine.
+    """
+    proc = subprocess.run(
+        [find_engine(), "--input", path, "--count"], capture_output=True
+    )
+    out = proc.stdout.decode("utf-8", "ignore").strip().splitlines()
+    try:
+        return max(1, int(out[0]))
+    except (ValueError, IndexError):
+        return 1
+
+
 def group_pages(lines: list[dict]) -> dict[int, list[dict]]:
     """Group line records by page, ordered top-to-bottom then left-to-right."""
     pages: dict[int, list[dict]] = {}

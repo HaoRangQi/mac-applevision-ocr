@@ -8,8 +8,9 @@ import os
 import sys
 
 from . import __version__
-from .engine import EngineNotFound, group_pages, run
+from .engine import EngineNotFound, group_pages, page_count, run
 from .layout import LayoutOptions, layout
+from .pages import PageSpecError, format_pages, parse_pages
 from .voting import vote
 
 DEFAULT_SCALES = "3.5,4.5,5.6"
@@ -43,7 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("input", nargs="+", help="PDF 或图片路径")
     parser.add_argument("-o", "--out", help="输出文件；多个输入时视为目录")
-    parser.add_argument("-p", "--pages", help="页码范围，如 26-40（仅 PDF）")
+    parser.add_argument("-p", "--pages", help="页码范围（仅 PDF）：如 26-40、1,5,20-30、-10（最后 10 页）")
     parser.add_argument(
         "--mode", choices=["layout", "text", "json"], default="layout",
         help="layout=还原段落表格（默认）；text=逐行；json=带坐标",
@@ -72,8 +73,31 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _resolve_pages(path: str, spec: str | None) -> str:
+    """Turn a user page spec into the canonical string the engine understands.
+
+    Resolving here (rather than in the engine) keeps the quirks — negative
+    indices, out-of-range clamping, deduplication — unit-testable, and lets us
+    fail loudly on a bad spec instead of silently OCR-ing zero pages.
+    """
+    text = (spec or "").strip()
+    if not text or text.lower() == "all":
+        return text
+    if not path.lower().endswith(".pdf"):
+        return ""  # images are single-page; the spec does not apply
+    try:
+        total = page_count(path)
+        picked = parse_pages(text, total)
+    except PageSpecError as exc:
+        raise RuntimeError(f"页码格式错误：{exc}") from exc
+    if not picked:
+        raise RuntimeError(f"页码 {spec!r} 在共 {total} 页的文档里没有有效页")
+    return format_pages(picked)
+
+
 def ocr_file(path: str, args: argparse.Namespace) -> str:
     is_pdf = path.lower().endswith(".pdf")
+    pages = _resolve_pages(path, args.pages)
     scales = [float(s) for s in args.scales.split(",") if s.strip()]
     if args.no_vote or not is_pdf:
         scales = scales[:1] or [4.5]
@@ -84,7 +108,7 @@ def ocr_file(path: str, args: argparse.Namespace) -> str:
             print(f"  识别 pass {i + 1}/{len(scales)} (scale={scale})", file=sys.stderr)
         lines = run(
             path,
-            pages=args.pages,
+            pages=pages,
             scale=scale,
             rot=args.rot,
             langs=args.lang,

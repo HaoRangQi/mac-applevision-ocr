@@ -49,6 +49,8 @@ Drop in a PDF or image → pick the page range and output shape → start recogn
 ```bash
 applevision-ocr book.pdf                      # whole book → book.txt
 applevision-ocr book.pdf -p 26-142 -o out.txt # specific page range
+applevision-ocr book.pdf -p 1,5,20-30         # several disjoint segments
+applevision-ocr book.pdf -p -10               # the last 10 pages
 applevision-ocr scan.png                      # image → terminal
 applevision-ocr a.pdf b.pdf -o out/           # batch, output to a directory
 applevision-ocr paper.pdf --lang en-US        # English-only document
@@ -58,13 +60,13 @@ Common flags:
 
 | Flag | Description |
 | --- | --- |
-| `-p, --pages 26-40` | Page range (PDF only) |
+| `-p, --pages 26-40` | Page range (PDF only): multi-segment `1,5,20-30`, or `-10` for the last 10 pages |
 | `-o, --out` | Output file; treated as a directory when multiple inputs are given |
 | `--mode layout\|text\|json` | Reconstruct paragraphs (default) / line-by-line / coordinate JSON |
 | `--scales 3.5,4.5,5.6` | Render scales for voting; a single value disables voting |
 | `--no-vote` | Disable multi-pass voting, about 3× faster |
 | `--rot -90` | Rotate the whole page before recognition, for landscape tables |
-| `--wrap 76` | Wrap lines at a character count |
+| `--wrap 76` | Soft-wrap by character count (0 = off): breaks at the next sentence punctuation after ~76 chars |
 | `--no-tables` | Don't reconstruct tables |
 | `--furniture off` | Don't auto-strip headers/footers (use for screenshot-style documents) |
 | `--notes end\|drop` | Footnotes to end of text / dropped |

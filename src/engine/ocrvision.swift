@@ -1,7 +1,8 @@
 // ocrvision — macOS 原生 Vision OCR 引擎
 // 输入 PDF 或图片，输出逐行 JSON（含坐标），供上层做投票与排版。
 //
-// 用法: ocrvision --input FILE [--pages A-B] [--scale 4.5] [--rot 0] [--lang zh-Hans,en-US]
+// 用法: ocrvision --input FILE [--pages A-B | 1,3-5] [--scale 4.5] [--rot 0] [--lang zh-Hans,en-US]
+//       ocrvision --input FILE --count        只打印页数（PDF 有效，图片为 1）
 // 输出: 每行一个 JSON: {"p":页码,"x":0-1,"y":0-1,"w":..,"h":..,"t":"文本"}
 
 import Foundation
@@ -20,6 +21,7 @@ struct Options {
     var langs = ["zh-Hans", "en-US"]
     var correct = true
     var fast = false
+    var count = false
 }
 
 func parseArgs() -> Options {
@@ -34,9 +36,11 @@ func parseArgs() -> Options {
         case "--lang", "-l": o.langs = (a.next() ?? "zh-Hans,en-US").split(separator: ",").map(String.init)
         case "--no-correct": o.correct = false
         case "--fast": o.fast = true
+        case "--count": o.count = true
         case "--help", "-h":
             FileHandle.standardError.write("""
-            ocrvision --input FILE [--pages A-B] [--scale 4.5] [--rot 0] [--lang zh-Hans,en-US] [--no-correct] [--fast]
+            ocrvision --input FILE [--pages A-B | 1,3-5] [--scale 4.5] [--rot 0] [--lang zh-Hans,en-US] [--no-correct] [--fast]
+            ocrvision --input FILE --count        只打印页数（PDF 有效，图片为 1）
 
             """.data(using: .utf8)!)
             exit(0)
@@ -130,6 +134,54 @@ func renderPDFPage(_ page: PDFPage) -> CGImage? {
     return ctx.makeImage()
 }
 
+// 把页码规格解析成升序去重的 1-based 页码数组。
+// 语法：`all` 或空 = 全部；逗号分隔多段；每段为单个页码 `A` 或区间 `A-B`。
+// 负数从末尾数：`-10` = 最后 10 页；`10--3` = 第 10 页到倒数第 3 页。
+// 倒序区间自动纠正，越界页号裁掉，重复页号合并。非法写法报错退出。
+func resolvePages(_ spec: String, total: Int) -> [Int] {
+    let s = spec.trimmingCharacters(in: .whitespacesAndNewlines)
+    if s.isEmpty || s.lowercased() == "all" || total <= 0 {
+        return Array(1...max(total, 0))
+    }
+    func fromEnd(_ n: Int) -> Int { n > 0 ? n : total + 1 + n }   // -1 → 最后一页
+
+    let rangeRe = try! NSRegularExpression(pattern: #"^(-?\d+)\s*-\s*(-?\d+)$"#)
+    let singleRe = try! NSRegularExpression(pattern: #"^(-?\d+)$"#)
+
+    func readGroups(_ re: NSRegularExpression, _ text: String) -> [Int]? {
+        let full = NSRange(text.startIndex..., in: text)
+        guard let m = re.firstMatch(in: text, range: full) else { return nil }
+        var out: [Int] = []
+        for i in 1..<m.numberOfRanges {
+            guard let r = Range(m.range(at: i), in: text) else { return nil }
+            out.append(Int(text[r]) ?? Int.min)
+        }
+        return out.isEmpty ? nil : out
+    }
+
+    var picked = Set<Int>()
+    for raw in s.split(separator: ",", omittingEmptySubsequences: false) {
+        let token = String(raw).trimmingCharacters(in: .whitespaces)
+        if token.isEmpty { continue }
+        if let rg = readGroups(rangeRe, token), rg.count == 2 {
+            let a = fromEnd(rg[0]), b = fromEnd(rg[1])
+            let lo = min(a, b), hi = max(a, b)                 // 倒序区间自动纠正
+            for p in lo...hi where p >= 1 && p <= total { picked.insert(p) }
+        } else if let one = readGroups(singleRe, token), let n = one.first {
+            if n > 0 {
+                if n >= 1 && n <= total { picked.insert(n) }   // 越界页号直接忽略
+            } else {                                           // -N = 最后 N 页
+                for p in (total + 1 + n)...total where p >= 1 { picked.insert(p) }
+            }
+        } else {
+            FileHandle.standardError.write(
+                "error: invalid page token '\(token)' in '\(s)'\n".data(using: .utf8)!)
+            exit(3)
+        }
+    }
+    return picked.sorted()
+}
+
 let ext = url.pathExtension.lowercased()
 let isPDF = ext == "pdf"
 
@@ -138,18 +190,20 @@ if isPDF {
         FileHandle.standardError.write("error: cannot open pdf\n".data(using: .utf8)!)
         exit(2)
     }
-    var start = 1, end = doc.pageCount
-    if opt.pages != "all" {
-        let parts = opt.pages.split(separator: "-").map { Int($0) ?? 0 }
-        if parts.count == 2 { start = max(1, parts[0]); end = min(doc.pageCount, parts[1]) }
-        else if parts.count == 1 { start = max(1, parts[0]); end = start }
+    if opt.count {
+        print(doc.pageCount)
+        exit(0)
     }
-    for i in (start - 1)..<end {
-        guard let page = doc.page(at: i), let img = renderPDFPage(page) else { continue }
-        emit(page: i + 1, lines: ocr(img))
-        FileHandle.standardError.write("page \(i + 1)\n".data(using: .utf8)!)
+    for pageNo in resolvePages(opt.pages, total: doc.pageCount) {
+        guard let page = doc.page(at: pageNo - 1), let img = renderPDFPage(page) else { continue }
+        emit(page: pageNo, lines: ocr(img))
+        FileHandle.standardError.write("page \(pageNo)\n".data(using: .utf8)!)
     }
 } else {
+    if opt.count {
+        print(1)
+        exit(0)
+    }
     guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
           let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else {
         FileHandle.standardError.write("error: cannot read image\n".data(using: .utf8)!)
