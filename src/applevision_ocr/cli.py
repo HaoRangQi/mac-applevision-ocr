@@ -68,6 +68,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--col-gap", type=float, default=0.030, help="表格列间距阈值")
     parser.add_argument("--wrap", type=int, default=0, help="按字数折行（0=不折）")
     parser.add_argument("--fast", action="store_true", help="快速模式（精度略降）")
+    parser.add_argument(
+        "--page-count", action="store_true",
+        help=argparse.SUPPRESS,  # 给图形界面算进度用，不对外暴露
+    )
     parser.add_argument("-q", "--quiet", action="store_true", help="不输出进度")
     parser.add_argument("--version", action="version", version=f"applevision-ocr {__version__}")
     return parser
@@ -148,6 +152,25 @@ def ocr_file(path: str, args: argparse.Namespace) -> str:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     multiple = len(args.input) > 1
+
+    if args.page_count:
+        # 图形界面用同一套页码语法估算进度，避免与实际识别的页数不一致
+        path = args.input[0]
+        try:
+            spec = _resolve_pages(path, args.pages)
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        if not spec:
+            # 未指定页码范围：图片恒 1 页，PDF 就是整本
+            print(page_count(path))
+        else:
+            try:
+                print(len(parse_pages(spec, page_count(path))))
+            except RuntimeError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+        return 0
 
     if multiple and args.out and not os.path.isdir(args.out):
         os.makedirs(args.out, exist_ok=True)

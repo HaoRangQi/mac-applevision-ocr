@@ -145,12 +145,35 @@ final class OCRModel: ObservableObject {
         }
     }
 
+    /// 期望处理的页数：交给 Python 用同一套页码语法解析，
+    /// 保证进度分母和实际会识别的页数一致（多段/倒数/越界都算得对）。
     private func expectedPages() -> Int {
+        guard let py = Self.pythonPath(), let root = Self.packageRoot(), let url else {
+            return max(1, pageCount)
+        }
         let pr = pageRange.trimmingCharacters(in: .whitespaces)
-        if !pr.isEmpty, let dash = pr.firstIndex(of: "-") {
-            let a = Int(pr[pr.startIndex..<dash]) ?? 1
-            let b = Int(pr[pr.index(after: dash)...]) ?? pageCount
-            return max(1, b - a + 1)
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: py)
+        var a = ["-m", "applevision_ocr", url.path, "--page-count"]
+        if !pr.isEmpty { a += ["-p", pr] }
+        p.arguments = a
+        var env = ProcessInfo.processInfo.environment
+        env["PYTHONPATH"] = root
+        if let engine = Self.enginePath() { env["APPLEVISION_OCR_ENGINE"] = engine }
+        p.environment = env
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        do {
+            try p.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            if let s = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               let n = Int(s), n > 0 {
+                return n
+            }
+        } catch {
+            // 查询失败就退回整本页数
         }
         return max(1, pageCount)
     }

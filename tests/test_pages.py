@@ -1,7 +1,11 @@
 """Tests for page-spec parsing (--pages)."""
 
+import contextlib
+import io
 import unittest
+from unittest import mock
 
+from applevision_ocr.cli import main
 from applevision_ocr.pages import (
     PageSpecError,
     format_pages,
@@ -84,6 +88,48 @@ class FormatPagesTest(unittest.TestCase):
         total = 20
         again = parse_pages(format_pages(original), total)
         self.assertEqual(again, original)
+
+
+class PageCountFlagTest(unittest.TestCase):
+    """The GUI asks the CLI how many pages a spec selects, to drive progress."""
+
+    TOTAL = 258
+
+    def _count(self, argv: list[str]) -> tuple[int, str, str]:
+        def fake_page_count(path: str) -> int:
+            return 1 if not path.endswith(".pdf") else self.TOTAL
+
+        with mock.patch("applevision_ocr.cli.page_count", side_effect=fake_page_count):
+            with contextlib.redirect_stdout(io.StringIO()) as out, \
+                 contextlib.redirect_stderr(io.StringIO()) as err:
+                code = main(argv)
+        return code, out.getvalue().strip(), err.getvalue().strip()
+
+    def test_pdf_without_a_spec_counts_the_whole_book(self):
+        self.assertEqual(self._count(["book.pdf", "--page-count"])[:2], (0, "258"))
+
+    def test_all_means_the_whole_book(self):
+        self.assertEqual(
+            self._count(["book.pdf", "--pages", "all", "--page-count"])[:2], (0, "258")
+        )
+
+    def test_multi_segment_spec(self):
+        self.assertEqual(
+            self._count(["book.pdf", "--pages", "1,3,5", "--page-count"])[:2], (0, "3")
+        )
+
+    def test_negative_index_counts_from_the_end(self):
+        self.assertEqual(
+            self._count(["book.pdf", "--pages", "-10", "--page-count"])[:2], (0, "10")
+        )
+
+    def test_image_is_always_one_page(self):
+        self.assertEqual(self._count(["scan.png", "--page-count"])[:2], (0, "1"))
+
+    def test_bad_spec_reports_an_error(self):
+        code, _, err = self._count(["book.pdf", "--pages", "1-5-9", "--page-count"])
+        self.assertEqual(code, 1)
+        self.assertIn("页码格式错误", err)
 
 
 if __name__ == "__main__":
