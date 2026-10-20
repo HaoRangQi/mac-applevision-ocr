@@ -729,16 +729,27 @@ enum SelfTest {
         print("head: \(m.text.prefix(60).replacingOccurrences(of: "\n", with: " | "))")
     }
 
+    /// 截图用的示例输入：固定使用仓库内的 dd.png（知乎截图），不引用任何真实书籍 PDF。
+    /// 由输出路径反推仓库根：`--snapshot docs/screenshot.png` → `<repo>/tests/fixtures/showcase.png`
+    static func fixturePath(forOutput path: String) -> String {
+        URL(fileURLWithPath: path)
+            .deletingLastPathComponent()   // <repo>/docs
+            .deletingLastPathComponent()   // <repo>
+            .appendingPathComponent("tests/fixtures/showcase.png")
+            .path
+    }
+
     static func snapshot(to path: String) {
         _ = NSApplication.shared
         let m = OCRModel()
-        m.url = URL(fileURLWithPath: "/Users/macos/Downloads/书籍资料/钱从哪里来7 (香帅) (z-library.sk, 1lib.sk, z-lib.sk).pdf")
-        m.pageCount = 258
-        m.status = "已载入 钱从哪里来7：重置.pdf · 258 页"
+        let fixture = Self.fixturePath(forOutput: path)   // tests/fixtures/showcase.png (= dd.png)
+        m.url = URL(fileURLWithPath: fixture)
+        m.pageCount = 1
+        m.status = "已载入 showcase.png · 1 页"
         if ProcessInfo.processInfo.environment["OCRSNAP"] == "run" {
             m.running = true
             m.progress = 0.42
-            m.status = "识别第 108 页…"
+            m.status = "识别第 1 页 · 第 1/3 路…"
         }
         if ProcessInfo.processInfo.environment["OCRSNAP"] == "empty" {
             m.url = nil
@@ -752,10 +763,11 @@ enum SelfTest {
         } else {
             // 默认的写文件模式
             m.writeToFile = true
-            m.outPath = "/Users/macos/Downloads/钱从哪里来7_前五章.txt"
-            m.resultPath = m.outPath
-            m.resultChars = 68600
-            m.status = "已保存 钱从哪里来7_前五章.txt · 68600 字 · 用时 42.3 秒"
+            let out = URL(fileURLWithPath: fixture).deletingPathExtension().appendingPathExtension("txt").path
+            m.outPath = out
+            m.resultPath = out
+            m.resultChars = previewBody.count
+            m.status = "已保存 showcase.txt · \(previewBody.count) 字 · 用时 1.8 秒"
             m.preview = previewBody
         }
         let v = NSHostingView(rootView: ContentView(m: m))
@@ -769,19 +781,22 @@ enum SelfTest {
         }
     }
 
-    /// 截图用的示例文本
+    /// 截图用的示例文本：固定使用 dd.png（知乎截图）的识别结果，不引用任何真实书籍内容。
     static let previewBody = """
-    《钱从哪里来7：重置》　香帅 著　新星出版社
-    收录：前言、第一章至第五章（原书第001—124页）
+    能不能告诉我，中国的税负在世界是什么水平？
 
-    ==========================================================
-    第一章　资金的岛链化叙事
-    ==========================================================
-
-    岛链化叙事
-
-    “美国制造业回来了！”
-    2022年12月，在亚利桑那州凤凰城郊外沙漠的一个工厂里，时任美国总统的拜登（Biden）发出了这个激动的声音——台积电投资建设的晶圆厂正在举行盛大的首批设备搬入仪式。
+    重水轮回立
+    2325人赞同了该回答〉
+    朋友一家移民美国。他妈在国内是典型的安分守己，相信**的那种人。去到美国后，一开始购物发现
+    结账跟商品价格对不上，儿子提醒后才知道税费被单独写出来。于是乎就开始BB税费怎么这么高之
+    类的。过了一段时间，他妈已经开始在他们的小区宣传说要换掉他们当地的州长了，说他们交的税被
+    乱花掉，浪费掉之类的了。
+    编辑于 2026-03-11 11:43
+    4 赞同2320 | • 92 条评论 | ★ 131 | →分享＋… |  | 收起へ
+    轰轰烈烈的医疗反腐为何突然沉寂？背后原因是什么？
+    平平安安：集采了。然后腐败在基层没有土壤，然后真正腐败都在高层了。一个大学同学说的。医
+    院集采两款伽马刀，有一款就是不好用，大家怎么反应都没用。好用的…阅读全文～
+    A 赞同1.3万 | • 641条评论 | ★ 1652 |  | →分享⋯
     """
 
     static func run(path: String) {
