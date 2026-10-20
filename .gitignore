@@ -1,0 +1,16 @@
+# build artifacts
+bin/
+app/dist/
+app/*.iconset/
+app/icon_1024.png
+*.o
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+build/
+*.egg-info/
+
+# macOS
+.DS_Store
