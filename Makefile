@@ -30,7 +30,7 @@ install-app: app
 	@echo "installed: $(APP_DIR)/VisionOCR.app"
 
 test:
-	@python3 -m unittest discover -s tests -v
+	@PYTHONPATH=src python3 -m unittest discover -s tests -v
 
 clean:
 	@rm -rf bin app/dist app/*.iconset app/icon_1024.png
