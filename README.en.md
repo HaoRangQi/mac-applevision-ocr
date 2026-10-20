@@ -74,6 +74,7 @@ Common flags:
 | `--furniture off` | Don't auto-strip headers/footers (use for screenshot-style documents) |
 | `--notes end\|drop` | Footnotes to end of text / dropped |
 | `--lang zh-Hans,en-US` | Recognition languages |
+| `-q, --quiet` | Silence progress output (one `page N` line per page by default) |
 
 ## How it works
 

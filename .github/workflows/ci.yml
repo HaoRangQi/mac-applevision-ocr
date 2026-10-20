@@ -41,5 +41,16 @@ jobs:
           ! ./bin/ocrvision --input /tmp/pages.pdf --pages 1-5-9 --fast 2>/dev/null >/dev/null
           echo "page spec ok"
 
+      - name: Verify progress reporting contract
+        # 界面进度条依赖引擎把「page N」实时写到 stderr，-q 时必须完全静音
+        run: |
+          ./bin/ocrvision --input tests/fixtures/sample.png --scale 4.5 2>/tmp/prog.txt >/dev/null
+          grep -qx 'page 1' /tmp/prog.txt || { echo "no page progress on stderr"; exit 1; }
+          ./bin/ocrvision --input tests/fixtures/sample.png --scale 4.5 -q 2>/tmp/prog.txt >/dev/null
+          [ ! -s /tmp/prog.txt ] || { echo "-q should be silent"; exit 1; }
+          ./bin/ocrvision --input /tmp/pages.pdf --fast -q 2>/tmp/prog.txt >/dev/null
+          [ ! -s /tmp/prog.txt ] || { echo "-q should be silent for pdf"; exit 1; }
+          echo "progress ok"
+
       - name: Build app
         run: cd app && ./build.sh

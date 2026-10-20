@@ -117,6 +117,7 @@ def ocr_file(path: str, args: argparse.Namespace) -> str:
             rot=args.rot,
             langs=args.lang,
             fast=args.fast,
+            quiet=args.quiet,
         )
         passes.append(group_pages(lines))
 

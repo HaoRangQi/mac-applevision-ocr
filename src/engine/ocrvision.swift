@@ -1,8 +1,9 @@
 // ocrvision — macOS 原生 Vision OCR 引擎
 // 输入 PDF 或图片，输出逐行 JSON（含坐标），供上层做投票与排版。
 //
-// 用法: ocrvision --input FILE [--pages A-B | 1,3-5] [--scale 4.5] [--rot 0] [--lang zh-Hans,en-US]
+// 用法: ocrvision --input FILE [--pages A-B | 1,3-5] [--scale 4.5] [--rot 0] [--lang zh-Hans,en-US] [-q]
 //       ocrvision --input FILE --count        只打印页数（PDF 有效，图片为 1）
+// 进度: 每处理一页往 stderr 写一行「page N」（-q 关闭），上层据此做实时进度
 // 输出: 每行一个 JSON: {"p":页码,"x":0-1,"y":0-1,"w":..,"h":..,"t":"文本"}
 
 import Foundation
@@ -22,6 +23,7 @@ struct Options {
     var correct = true
     var fast = false
     var count = false
+    var quiet = false
 }
 
 func parseArgs() -> Options {
@@ -37,6 +39,7 @@ func parseArgs() -> Options {
         case "--no-correct": o.correct = false
         case "--fast": o.fast = true
         case "--count": o.count = true
+        case "--quiet", "-q": o.quiet = true
         case "--help", "-h":
             FileHandle.standardError.write("""
             ocrvision --input FILE [--pages A-B | 1,3-5] [--scale 4.5] [--rot 0] [--lang zh-Hans,en-US] [--no-correct] [--fast]
@@ -182,6 +185,14 @@ func resolvePages(_ spec: String, total: Int) -> [Int] {
     return picked.sorted()
 }
 
+// 进度日志：每处理一页往 stderr 写一行「page N」。
+// 上层（Python CLI / 图形界面）靠这个做实时进度，所以不要缓冲、不要省略。
+func progress(_ page: Int) {
+    if !opt.quiet {
+        FileHandle.standardError.write("page \(page)\n".data(using: .utf8)!)
+    }
+}
+
 let ext = url.pathExtension.lowercased()
 let isPDF = ext == "pdf"
 
@@ -196,14 +207,15 @@ if isPDF {
     }
     for pageNo in resolvePages(opt.pages, total: doc.pageCount) {
         guard let page = doc.page(at: pageNo - 1), let img = renderPDFPage(page) else { continue }
+        progress(pageNo)
         emit(page: pageNo, lines: ocr(img))
-        FileHandle.standardError.write("page \(pageNo)\n".data(using: .utf8)!)
     }
 } else {
     if opt.count {
         print(1)
         exit(0)
     }
+    progress(1)
     guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
           let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else {
         FileHandle.standardError.write("error: cannot read image\n".data(using: .utf8)!)
@@ -224,5 +236,7 @@ if isPDF {
         }
     }
     emit(page: 1, lines: ocr(use))
-    FileHandle.standardError.write("image done\n".data(using: .utf8)!)
+    if !opt.quiet {
+        FileHandle.standardError.write("image done\n".data(using: .utf8)!)
+    }
 }

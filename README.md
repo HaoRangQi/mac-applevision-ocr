@@ -72,6 +72,7 @@ applevision-ocr paper.pdf --lang en-US        # 纯英文文档
 | `--furniture off` | 不自动去页眉页脚（截图类文档用） |
 | `--notes end\|drop` | 脚注收在文末 / 丢弃 |
 | `--lang zh-Hans,en-US` | 识别语言 |
+| `-q, --quiet` | 不输出进度（默认每页打印一行 `page N`） |
 
 ## 它是怎么做的
 

@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 
 ENGINE_NAME = "ocrvision"
 INSTALL_ROOT = os.path.expanduser("~/.local/share/applevision-ocr")
@@ -61,8 +62,15 @@ def run(
     langs: str = "zh-Hans,en-US",
     correct: bool = True,
     fast: bool = False,
+    quiet: bool = False,
 ) -> list[dict]:
-    """Run the engine over one file and return parsed line records."""
+    """Run the engine over one file and return parsed line records.
+
+    The engine reports progress on stderr as one ``page N`` line per page.
+    It has to be forwarded as it arrives: capturing it in a pipe (the old
+    behaviour) buffers it until the engine exits, which meant a 258-page run
+    showed no progress at all until it finished.
+    """
     cmd = [
         find_engine(),
         "--input", path,
@@ -76,15 +84,36 @@ def run(
         cmd.append("--no-correct")
     if fast:
         cmd.append("--fast")
+    if quiet:
+        cmd.append("--quiet")
 
-    proc = subprocess.run(cmd, capture_output=True)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stderr_lines: list[str] = []
+
+    def pump() -> None:
+        for raw in iter(proc.stderr.readline, b""):  # type: ignore[union-attr]
+            text = raw.decode("utf-8", "ignore").rstrip("\n")
+            if not text:
+                continue
+            stderr_lines.append(text)
+            if not quiet:
+                print(text, file=sys.stderr, flush=True)
+
+    reader = threading.Thread(target=pump, daemon=True)
+    reader.start()
+    stdout = proc.stdout.read() if proc.stdout else b""
+    proc.wait()
+    reader.join()
+
     if proc.returncode != 0:
+        detail = "\n".join(stderr_lines[-20:])
         raise RuntimeError(
-            "引擎执行失败：\n" + proc.stderr.decode("utf-8", "ignore")[:800]
+            f"引擎执行失败（退出码 {proc.returncode}）"
+            + (f"\n{detail[:600]}" if detail else "")
         )
 
     out: list[dict] = []
-    for line in proc.stdout.decode("utf-8", "ignore").splitlines():
+    for line in stdout.decode("utf-8", "ignore").splitlines():
         line = line.strip()
         if not line:
             continue

@@ -37,6 +37,9 @@ final class OCRModel: ObservableObject {
     private var buf = ""
     private var donePages = 0
     private var totalUnits = 1
+    private var totalPages = 0
+    private var currentPass = 1
+    private var totalPasses = 1
     private var outData = Data()
     private var toFile = false
 
@@ -173,8 +176,11 @@ final class OCRModel: ObservableObject {
         }
 
         let pages = expectedPages()
+        totalPages = pages
         let passes = (vote && url.pathExtension.lowercased() == "pdf") ? 3 : 1
         totalUnits = max(1, pages * passes)
+        currentPass = 1
+        totalPasses = passes
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: py)
@@ -258,10 +264,22 @@ final class OCRModel: ObservableObject {
             buf = String(buf[buf.index(after: i)...])
             guard !line.isEmpty else { continue }
             log += line + "\n"
-            if line.hasPrefix("page ") || line.contains("pass ") {
-                if line.hasPrefix("page ") { donePages += 1 }
-                progress = min(0.98, Double(donePages) / Double(totalUnits))
-                status = line.hasPrefix("page ") ? "识别第 \(line.dropFirst(5)) 页…" : line
+            if line.hasPrefix("识别 pass ") {
+                // 「识别 pass 2/3 (scale=4.5)」→ 记下第几路，好在状态里显示
+                let head = line.dropFirst("识别 pass ".count)
+                let parts = head.split(separator: "/", maxSplits: 1)
+                if parts.count == 2 {
+                    currentPass = Int(parts[0]) ?? 1
+                    totalPasses = Int(parts[1].prefix(while: { !$0.isWhitespace })) ?? 1
+                }
+                status = "第 \(currentPass)/\(totalPasses) 路识别…"
+            }
+            if line.hasPrefix("page ") {
+                donePages += 1
+                progress = min(0.99, Double(donePages) / Double(totalUnits))
+                let page = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+                let passNote = totalPasses > 1 ? " · 第 \(currentPass)/\(totalPasses) 路" : ""
+                status = "识别第 \(page)/\(totalPages) 页\(passNote)…"
             }
             // 写文件模式下 CLI 会报告「→ 路径 (N 字)」，取出字数
             if toFile, line.hasPrefix("→ "),
@@ -688,9 +706,16 @@ enum SelfTest {
         }
         m.run()
         let deadline = Date().addingTimeInterval(180)
+        // 每 2 秒打印一次进度，用于无界面验证进度条是否真的在走
+        let ticker = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+            guard m.running else { return }
+            print(String(format: "进度 %3.0f%% · %@", m.progress * 100, m.status))
+        }
         while m.running && Date() < deadline {
             RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         }
+        ticker.invalidate()
+        print(String(format: "进度 %3.0f%% · %@", m.progress * 100, m.status))
         print("toFile: \(m.writeToFile)")
         print("status: \(m.status)")
         print("chars: \(m.text.count)")
