@@ -2,7 +2,7 @@
 PREFIX ?= $(HOME)/.local
 APP_DIR = $(HOME)/Applications
 
-.PHONY: all engine app install install-app test clean dist help
+.PHONY: all engine app install install-app test showcase clean dist help
 
 all: engine
 
@@ -12,6 +12,7 @@ help:
 	@echo "make app         打包 AppleVisionOCR.app 到 app/dist/"
 	@echo "make install-app 打包并复制到 $(APP_DIR)"
 	@echo "make test        运行单元测试"
+	@echo "make showcase    重新生成 README 顶部的「截图 → 文本」对比图"
 	@echo "make clean       清理构建产物"
 
 engine:
@@ -31,6 +32,12 @@ install-app: app
 
 test:
 	@PYTHONPATH=src python3 -m unittest discover -s tests -v
+
+# 重新生成 README 顶部的对比图：先用本项目自己识别截图，再用 Swift 排版成左右对比。
+showcase: engine
+	@PYTHONPATH=src python3 -m applevision_ocr.cli tests/fixtures/showcase.png --no-vote -o /tmp/showcase.txt
+	@swiftc -O scripts/make-showcase.swift -o bin/make-showcase
+	@./bin/make-showcase tests/fixtures/showcase.png /tmp/showcase.txt docs/showcase.png
 
 clean:
 	@rm -rf bin app/dist app/*.iconset app/icon_1024.png

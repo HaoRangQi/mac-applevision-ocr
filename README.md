@@ -4,7 +4,9 @@
 
 基于 macOS 自带的 **Vision** 框架，全部在本机完成，不联网、不上传、不需要 API key。
 
-![界面](docs/screenshot.png)
+![截图 → 文本](docs/showcase.png)
+
+*上面这张图就是真实效果：左边是原始截图，右边是 `applevision-ocr` 直接吐出的文本，命令 `applevision-ocr 截图.png --no-vote`，没有二次编辑。*
 
 ## 为什么是它
 
@@ -34,6 +36,8 @@ make install-app      # 打包 AppleVisionOCR.app 到 ~/Applications
 ```bash
 open ~/Applications/AppleVisionOCR.app
 ```
+
+![界面](docs/screenshot.png)
 
 拖入 PDF 或图片 → 选页码和输出形态 → 开始识别 → 复制或保存。
 支持 `Cmd+O` 打开、`Cmd+S` 导出、`Cmd+R` 开始；在访达里双击 PDF 也可以直接用本应用打开。
