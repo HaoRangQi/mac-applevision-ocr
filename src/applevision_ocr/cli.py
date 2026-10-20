@@ -16,6 +16,19 @@ from .voting import vote
 DEFAULT_SCALES = "3.5,4.5,5.6"
 
 
+def scales_for_passes(n: int | None, scales_arg: str) -> list[float]:
+    """把 ``--passes`` 换算成渲染倍率列表。
+
+    路数取前 N 个倍率：1 路 = 3.5 单路，2 路 = 3.5+4.5，3 路 = 全量。
+    实测（把截图降采样当扫描件）单路会稳定错字，3.5+4.5 两路已能修掉，
+    所以 2 路是「速度 / 准确」最划算的一档。显式给了 ``--scales`` 时以它为准。
+    """
+    scales = [float(s) for s in scales_arg.split(",") if s.strip()]
+    if n is not None and scales_arg == DEFAULT_SCALES:
+        scales = scales[: max(1, min(3, n))]
+    return scales or [4.5]
+
+
 def wrap_text(text: str, width: int) -> str:
     """Soft-wrap CJK text at sentence punctuation near the target width."""
     if not width:
@@ -52,6 +65,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--scales", default=DEFAULT_SCALES,
         help=f"投票用的渲染倍率，逗号分隔；只给一个即关闭投票（默认 {DEFAULT_SCALES}）",
+    )
+    parser.add_argument(
+        "--passes", type=int, choices=(1, 2, 3), default=None,
+        help="识别路数 1-3（仅 PDF 有效）：取前 N 个渲染倍率，1=最快、3=最准",
     )
     parser.add_argument("--rot", type=float, default=0, help="整页旋转角度，如 -90")
     parser.add_argument("--lang", default="zh-Hans,en-US", help="识别语言，逗号分隔")
@@ -102,7 +119,7 @@ def _resolve_pages(path: str, spec: str | None) -> str:
 def ocr_file(path: str, args: argparse.Namespace) -> str:
     is_pdf = path.lower().endswith(".pdf")
     pages = _resolve_pages(path, args.pages)
-    scales = [float(s) for s in args.scales.split(",") if s.strip()]
+    scales = scales_for_passes(args.passes, args.scales)
     if args.no_vote or not is_pdf:
         scales = scales[:1] or [4.5]
 

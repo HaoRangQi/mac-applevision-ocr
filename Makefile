@@ -2,7 +2,7 @@
 PREFIX ?= $(HOME)/.local
 APP_DIR = $(HOME)/Applications
 
-.PHONY: all engine app install install-app test showcase clean dist help
+.PHONY: all engine app install install-app test showcase fixture-pdf clean dist help
 
 all: engine
 
@@ -13,6 +13,7 @@ help:
 	@echo "make install-app 打包并复制到 $(APP_DIR)"
 	@echo "make test        运行单元测试"
 	@echo "make showcase    重新生成 README 顶部的「截图 → 文本」对比图"
+	@echo "make fixture-pdf 把 tests/fixtures/showcase.png 包成单页 PDF 素材"
 	@echo "make clean       清理构建产物"
 
 engine:
@@ -38,6 +39,11 @@ showcase: engine
 	@PYTHONPATH=src python3 -m applevision_ocr.cli tests/fixtures/showcase.png --no-vote -o /tmp/showcase.txt
 	@swiftc -O scripts/make-showcase.swift -o bin/make-showcase
 	@./bin/make-showcase tests/fixtures/showcase.png /tmp/showcase.txt docs/showcase.png
+
+# PDF 素材：把 showcase.png（dd.png）包成单页 PDF，供截图与测试使用
+fixture-pdf:
+	@swiftc -O scripts/make-fixture-pdf.swift -o bin/make-fixture-pdf
+	@./bin/make-fixture-pdf tests/fixtures/showcase.png tests/fixtures/showcase.pdf
 
 clean:
 	@rm -rf bin app/dist app/*.iconset app/icon_1024.png

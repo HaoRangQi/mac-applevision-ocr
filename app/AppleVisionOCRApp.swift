@@ -32,7 +32,8 @@ final class OCRModel: ObservableObject {
     @Published var pageRange = ""
     @Published var mode = "layout"
     @Published var rotate = 0
-    @Published var vote = true
+    /// 识别路数 1-3：取 3.5 / 4.5 / 5.6 三个倍率里的前 N 个（仅 PDF 有效）
+    @Published var passes = 3
     @Published var wrap = false
     @Published var text = ""
     @Published var status = "把 PDF 或图片拖进来"
@@ -355,7 +356,10 @@ final class OCRModel: ObservableObject {
         var args = ["-m", "applevision_ocr", url.path, "--mode", mode]
         let pr = pageRange.trimmingCharacters(in: .whitespaces)
         if !pr.isEmpty { args += ["-p", pr] }
-        if !vote { args += ["--no-vote"] }
+        // 图片只跑一路（引擎侧也强制如此），PDF 才按用户选的路数投票
+        let isPDF = url.pathExtension.lowercased() == "pdf"
+        let nPasses = isPDF ? max(1, min(3, passes)) : 1
+        args += ["--passes", String(nPasses)]
         if rotate != 0 { args += ["--rot", String(rotate)] }
         if wrap { args += ["--wrap", "76"] }
 
@@ -385,10 +389,9 @@ final class OCRModel: ObservableObject {
 
         let pages = expectedPages()
         totalPages = pages
-        let passes = (vote && url.pathExtension.lowercased() == "pdf") ? 3 : 1
-        totalUnits = max(1, pages * passes)
+        totalUnits = max(1, pages * nPasses)
         currentPass = 1
-        totalPasses = passes
+        totalPasses = nPasses
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: py)
@@ -706,8 +709,27 @@ struct ContentView: View {
                 }
                 .font(.callout)
 
-                Toggle("三路投票（更准，约 3 倍耗时）", isOn: $m.vote)
-                    .font(.callout)
+                // 识别路数：1 最快、3 最准，用户自己拖
+                HStack(spacing: 8) {
+                    Text("识别路数").frame(width: 62, alignment: .leading)
+                    Slider(
+                        value: Binding(
+                            get: { Double(m.passes) },
+                            set: { m.passes = Int($0.rounded()) }
+                        ),
+                        in: 1...3, step: 1
+                    )
+                    .disabled(!m.hasPDF)
+                    Text("\(m.passes) 路")
+                        .font(.callout.monospacedDigit())
+                        .frame(width: 32, alignment: .trailing)
+                }
+                .font(.callout)
+                Text(m.hasPDF || m.jobs.isEmpty
+                     ? "1 路最快 · 2 路折中 · 3 路最准（约 3 倍耗时）"
+                     : "图片固定单路，多路投票仅 PDF 有效")
+                    .font(.caption2).foregroundStyle(.tertiary)
+
                 Toggle("按 76 字折行", isOn: $m.wrap)
                     .font(.callout)
             }
@@ -1057,14 +1079,18 @@ enum SelfTest {
         _ = NSApplication.shared
         let m = OCRModel()
         m.load(URL(fileURLWithPath: path))
-        m.vote = false
+        m.passes = 1
         // OCRDISPLAY=1 → 界面显示模式；否则走默认的写文件模式
         if ProcessInfo.processInfo.environment["OCRDISPLAY"] == "1" { m.writeToFile = false }
         // OCROUT=路径 → 覆盖默认输出路径（用于校验路径检查）
         if let o = ProcessInfo.processInfo.environment["OCROUT"] { m.outPath = o }
         if let pg = ProcessInfo.processInfo.environment["OCRPAGES"] {
             m.pageRange = pg
-            m.vote = true
+            m.passes = 3
+        }
+        // OCRPASSES=2 → 覆盖路数，用来验证滑杆对应的进度分母
+        if let np = ProcessInfo.processInfo.environment["OCRPASSES"] {
+            m.passes = Int(np) ?? 1
         }
         m.run()
         let deadline = Date().addingTimeInterval(180)
@@ -1095,7 +1121,7 @@ enum SelfTest {
     static func runBatch(outDir: String, files: [String]) {
         _ = NSApplication.shared
         let m = OCRModel()
-        m.vote = false
+        m.passes = 1
         m.batchOutDir = outDir
         m.add(files.map { URL(fileURLWithPath: $0) })
         print("queued: \(m.jobs.count)")
@@ -1116,23 +1142,24 @@ enum SelfTest {
         }
     }
 
-    /// 截图用的示例输入：固定使用仓库内的 dd.png（知乎截图），不引用任何真实书籍 PDF。
-    /// 由输出路径反推仓库根：`--snapshot docs/screenshot.png` → `<repo>/tests/fixtures/showcase.png`
+    /// 截图用的示例输入：固定使用仓库内的 dd.png（知乎截图）及其 PDF 版，不引用任何真实书籍。
+    /// 用 PDF 是为了让「多路投票」这类仅 PDF 生效的设置能在截图里如实展示。
+    /// 由输出路径反推仓库根：`--snapshot docs/screenshot.png` → `<repo>/tests/fixtures/showcase.pdf`
     static func fixturePath(forOutput path: String) -> String {
         URL(fileURLWithPath: path)
             .deletingLastPathComponent()   // <repo>/docs
             .deletingLastPathComponent()   // <repo>
-            .appendingPathComponent("tests/fixtures/showcase.png")
+            .appendingPathComponent("tests/fixtures/showcase.pdf")
             .path
     }
 
     static func snapshot(to path: String) {
         _ = NSApplication.shared
         let m = OCRModel()
-        let fixture = Self.fixturePath(forOutput: path)   // tests/fixtures/showcase.png (= dd.png)
+        let fixture = Self.fixturePath(forOutput: path)   // tests/fixtures/showcase.pdf (= dd.png)
         m.url = URL(fileURLWithPath: fixture)
         m.pageCount = 1
-        m.status = "已载入 showcase.png · 1 页"
+        m.status = "已载入 showcase.pdf · 1 页"
         if ProcessInfo.processInfo.environment["OCRSNAP"] == "run" {
             m.running = true
             m.progress = 0.42

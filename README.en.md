@@ -49,6 +49,8 @@ Results are **written straight to a file by default**. The path is editable and 
 
 `Cmd+O` opens a file, `Cmd+R` starts; double-clicking a PDF in Finder also opens it in this app.
 
+**Pick your own pass count**: drag the 「识别路数」slider between 1 and 3. One pass is fastest, three is most accurate (about 3× the time). Measurements show that two passes (scales 3.5 + 4.5) already fix the characters a single pass gets wrong — the best speed/accuracy trade-off. Pictures always run a single pass; voting only applies to PDFs.
+
 **Batch queue**: drop or select several PDFs / images at once and they line up in the left-hand queue, then run one after another. Each file shows its own state (waiting / running / done with N chars / failed) while the bar at the bottom tracks overall progress. Every file is saved as a same-named `.txt` by default, or into a single output directory you pick.
 
 ![Batch queue](docs/screenshot-batch.png)
@@ -76,7 +78,8 @@ Common flags:
 | `-p, --pages 26-40` | Page range (PDF only): multi-segment `1,5,20-30`, or `-10` for the last 10 pages |
 | `-o, --out` | Output file; treated as a directory when multiple inputs are given |
 | `--mode layout\|text\|json` | Reconstruct paragraphs (default) / line-by-line / coordinate JSON |
-| `--scales 3.5,4.5,5.6` | Render scales for voting; a single value disables voting |
+| `--scales 3.5,4.5,5.6` | Render scales for voting; a single value disables voting; wins over `--passes` when given explicitly |
+| `--passes 1-3` | Number of recognition passes (PDF only): takes the first N scales, 1 = fastest, 3 = most accurate |
 | `--no-vote` | Disable multi-pass voting, about 3× faster |
 | `--rot -90` | Rotate the whole page before recognition, for landscape tables |
 | `--wrap 76` | Soft-wrap by character count (0 = off): breaks at the next sentence punctuation after ~76 chars |
