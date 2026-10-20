@@ -2,7 +2,7 @@
 
 import unittest
 
-from vision_ocr.voting import vote, vote_line
+from applevision_ocr.voting import vote, vote_line
 
 
 class VoteLineTest(unittest.TestCase):

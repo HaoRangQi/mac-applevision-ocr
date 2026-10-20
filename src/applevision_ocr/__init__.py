@@ -1,4 +1,4 @@
-"""apple-vision-ocr: local OCR for macOS, powered by the Vision framework."""
+"""applevision-ocr: local OCR for macOS, powered by the Vision framework."""
 
 __version__ = "1.0.0"
 

@@ -2,7 +2,7 @@
 
 import unittest
 
-from vision_ocr.layout import LayoutOptions, detect_furniture, is_furniture, layout
+from applevision_ocr.layout import LayoutOptions, detect_furniture, is_furniture, layout
 
 
 def line(text, x=0.15, y=0.2, h=0.025, page=1):

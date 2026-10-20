@@ -3,13 +3,13 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "apple-vision-ocr"
+name = "applevision-ocr"
 version = "1.0.0"
 description = "Local OCR for macOS built on the Vision framework: scanned PDFs and images to readable text"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "apple-vision-ocr contributors" }]
+authors = [{ name = "applevision-ocr contributors" }]
 keywords = ["ocr", "macos", "vision", "pdf", "text-recognition", "chinese"]
 classifiers = [
     "Environment :: MacOS X",
@@ -20,10 +20,10 @@ classifiers = [
 ]
 
 [project.scripts]
-vision-ocr = "vision_ocr.cli:main"
+applevision-ocr = "applevision_ocr.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/your-name/apple-vision-ocr"
+Homepage = "https://github.com/your-name/applevision-ocr"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

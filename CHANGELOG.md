@@ -11,8 +11,8 @@
 - Swift + Vision OCR 引擎 `ocrvision`，支持 PDF 与常见图片格式、页码范围、整页旋转。
 - 三路分辨率识别 + 逐字投票，显著降低中文单字误识。
 - 版式还原：跨页段落续接、表格网格、图题占位、脚注收集、页眉页脚剔除。
-- 命令行 `vision-ocr`，支持 layout / text / json 三种输出、批量处理。
-- macOS 图形界面 `VisionOCR.app`：拖放、进度、结果预览、导出。
+- 命令行 `applevision-ocr`，支持 layout / text / json 三种输出、批量处理。
+- macOS 图形界面 `AppleVisionOCR.app`：拖放、进度、结果预览、导出。
 - 单元测试覆盖投票、版式、错字规则。
 
 ### 已知问题

@@ -1,4 +1,4 @@
-# apple-vision-ocr — local OCR for macOS
+# applevision-ocr — local OCR for macOS
 PREFIX ?= $(HOME)/.local
 APP_DIR = $(HOME)/Applications
 
@@ -8,8 +8,8 @@ all: engine
 
 help:
 	@echo "make engine      编译 OCR 引擎到 bin/ocrvision"
-	@echo "make install     安装命令 vision-ocr 到 $(PREFIX)/bin"
-	@echo "make app         打包 VisionOCR.app 到 app/dist/"
+	@echo "make install     安装命令 applevision-ocr 到 $(PREFIX)/bin"
+	@echo "make app         打包 AppleVisionOCR.app 到 app/dist/"
 	@echo "make install-app 打包并复制到 $(APP_DIR)"
 	@echo "make test        运行单元测试"
 	@echo "make clean       清理构建产物"
@@ -25,9 +25,9 @@ app:
 
 install-app: app
 	@mkdir -p $(APP_DIR)
-	@rm -rf $(APP_DIR)/VisionOCR.app
-	@cp -R app/dist/VisionOCR.app $(APP_DIR)/
-	@echo "installed: $(APP_DIR)/VisionOCR.app"
+	@rm -rf $(APP_DIR)/AppleVisionOCR.app
+	@cp -R app/dist/AppleVisionOCR.app $(APP_DIR)/
+	@echo "installed: $(APP_DIR)/AppleVisionOCR.app"
 
 test:
 	@PYTHONPATH=src python3 -m unittest discover -s tests -v

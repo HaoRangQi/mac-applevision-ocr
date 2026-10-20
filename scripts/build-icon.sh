@@ -3,8 +3,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT/app"
-swiftc -O icon.swift -o /tmp/vision-ocr-icon
-/tmp/vision-ocr-icon >/dev/null
+swiftc -O icon.swift -o /tmp/applevision-ocr-icon
+/tmp/applevision-ocr-icon >/dev/null
 rm -rf AppIcon.iconset && mkdir -p AppIcon.iconset
 for s in 16 32 128 256 512; do
   sips -z $s $s icon_1024.png --out AppIcon.iconset/icon_${s}x${s}.png >/dev/null

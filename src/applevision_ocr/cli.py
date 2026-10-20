@@ -37,9 +37,9 @@ def wrap_text(text: str, width: int) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="vision-ocr",
+        prog="applevision-ocr",
         description="macOS 原生 OCR：扫描版 PDF / 图片 → 文本",
-        epilog="示例：vision-ocr book.pdf -p 1-20 -o out.txt",
+        epilog="示例：applevision-ocr book.pdf -p 1-20 -o out.txt",
     )
     parser.add_argument("input", nargs="+", help="PDF 或图片路径")
     parser.add_argument("-o", "--out", help="输出文件；多个输入时视为目录")
@@ -68,7 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--wrap", type=int, default=0, help="按字数折行（0=不折）")
     parser.add_argument("--fast", action="store_true", help="快速模式（精度略降）")
     parser.add_argument("-q", "--quiet", action="store_true", help="不输出进度")
-    parser.add_argument("--version", action="version", version=f"vision-ocr {__version__}")
+    parser.add_argument("--version", action="version", version=f"applevision-ocr {__version__}")
     return parser
 
 

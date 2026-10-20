@@ -2,7 +2,7 @@
 
 import unittest
 
-from vision_ocr.fixes import fix_text
+from applevision_ocr.fixes import fix_text
 
 
 class FixTextTest(unittest.TestCase):

@@ -45,16 +45,16 @@ final class OCRModel: ObservableObject {
     }
 
     static func packageRoot() -> String? {
-        if let r = Bundle.main.resourceURL?.appendingPathComponent("vision_ocr").path,
+        if let r = Bundle.main.resourceURL?.appendingPathComponent("applevision_ocr").path,
            FileManager.default.fileExists(atPath: r) { return Bundle.main.resourceURL?.path }
-        let p = NSHomeDirectory() + "/.local/share/vision-ocr"
+        let p = NSHomeDirectory() + "/.local/share/applevision-ocr"
         return FileManager.default.fileExists(atPath: p) ? p : nil
     }
 
     static func enginePath() -> String? {
         if let r = Bundle.main.resourceURL?.appendingPathComponent("ocrvision").path,
            FileManager.default.fileExists(atPath: r) { return r }
-        let p = NSHomeDirectory() + "/.local/share/vision-ocr/ocrvision"
+        let p = NSHomeDirectory() + "/.local/share/applevision-ocr/ocrvision"
         return FileManager.default.fileExists(atPath: p) ? p : nil
     }
 
@@ -96,7 +96,7 @@ final class OCRModel: ObservableObject {
         started = Date()
         status = "正在识别…"
 
-        var args = ["-m", "vision_ocr", url.path, "--mode", mode]
+        var args = ["-m", "applevision_ocr", url.path, "--mode", mode]
         let pr = pageRange.trimmingCharacters(in: .whitespaces)
         if !pr.isEmpty { args += ["-p", pr] }
         if !vote { args += ["--no-vote"] }
@@ -112,7 +112,7 @@ final class OCRModel: ObservableObject {
         p.arguments = args
         var env = ProcessInfo.processInfo.environment
         env["PYTHONPATH"] = root
-        if let engine = Self.enginePath() { env["VISION_OCR_ENGINE"] = engine }
+        if let engine = Self.enginePath() { env["APPLEVISION_OCR_ENGINE"] = engine }
         p.environment = env
         let outPipe = Pipe(), errPipe = Pipe()
         p.standardOutput = outPipe
@@ -234,7 +234,7 @@ struct ContentView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("VisionOCR").font(.system(size: 19, weight: .semibold))
+                Text("AppleVisionOCR").font(.system(size: 19, weight: .semibold))
                 Text("本地识别 · 不上传").font(.caption).foregroundStyle(.secondary)
             }
 
@@ -402,7 +402,7 @@ struct ContentView: View {
 // MARK: - 入口
 
 @main
-struct VisionOCRApp: App {
+struct AppleVisionOCRApp: App {
     let model = OCRModel()
 
     init() {
@@ -427,7 +427,7 @@ struct VisionOCRApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
     var body: some Scene {
-        WindowGroup("VisionOCR") {
+        WindowGroup("AppleVisionOCR") {
             ContentView(m: model)
         }
         .windowResizability(.contentMinSize)
@@ -521,10 +521,10 @@ enum SelfTest {
         print("package: \(root)")
         let p = Process()
         p.executableURL = URL(fileURLWithPath: py)
-        p.arguments = ["-m", "vision_ocr", path, "--no-vote"]
+        p.arguments = ["-m", "applevision_ocr", path, "--no-vote"]
         var env = ProcessInfo.processInfo.environment
         env["PYTHONPATH"] = root
-        if let engine = OCRModel.enginePath() { env["VISION_OCR_ENGINE"] = engine }
+        if let engine = OCRModel.enginePath() { env["APPLEVISION_OCR_ENGINE"] = engine }
         p.environment = env
         let out = Pipe(), err = Pipe()
         p.standardOutput = out

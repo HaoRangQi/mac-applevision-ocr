@@ -14,7 +14,7 @@ import subprocess
 import sys
 
 ENGINE_NAME = "ocrvision"
-INSTALL_ROOT = os.path.expanduser("~/.local/share/vision-ocr")
+INSTALL_ROOT = os.path.expanduser("~/.local/share/applevision-ocr")
 
 
 class EngineNotFound(RuntimeError):
@@ -24,10 +24,10 @@ class EngineNotFound(RuntimeError):
 def find_engine() -> str:
     """Locate the engine binary.
 
-    Order: $VISION_OCR_ENGINE, the install root, the package's parent tree
+    Order: $APPLEVISION_OCR_ENGINE, the install root, the package's parent tree
     (source checkout), then $PATH.
     """
-    env = os.environ.get("VISION_OCR_ENGINE")
+    env = os.environ.get("APPLEVISION_OCR_ENGINE")
     if env and os.path.isfile(env) and os.access(env, os.X_OK):
         return env
 
