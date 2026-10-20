@@ -19,6 +19,18 @@ final class OCRModel: ObservableObject {
     @Published var running = false
     @Published var log = ""
     @Published var targeted = false
+    // 输出目的地：默认写文件（大文本在界面里渲染会卡）
+    @Published var writeToFile = true
+    @Published var outPath = ""
+    @Published var resultPath = ""
+    @Published var resultChars = 0
+    @Published var preview = ""
+
+    /// 界面里最多预览多少字，再多只写到文件里
+    static let previewChars = 2000
+
+    /// 预览用字符数上限，防止把整本书读进来渲染
+    private var previewLimit: Int { Self.previewChars }
 
     private var proc: Process?
     private var started = Date()
@@ -26,6 +38,7 @@ final class OCRModel: ObservableObject {
     private var donePages = 0
     private var totalUnits = 1
     private var outData = Data()
+    private var toFile = false
 
     static weak var shared: OCRModel?
 
@@ -64,6 +77,10 @@ final class OCRModel: ObservableObject {
         text = ""
         log = ""
         progress = 0
+        resultPath = ""
+        resultChars = 0
+        preview = ""
+        outPath = Self.defaultOutPath(for: u)
         if u.pathExtension.lowercased() == "pdf",
            let doc = PDFDocument(url: u) {
             pageCount = doc.pageCount
@@ -72,6 +89,29 @@ final class OCRModel: ObservableObject {
             pageCount = 1
             status = "已载入 \(u.lastPathComponent)"
         }
+    }
+
+    /// 默认输出路径：与源文件同目录同名，后缀换成 .txt；无后缀则追加 .txt
+    static func defaultOutPath(for u: URL) -> String {
+        if u.pathExtension.isEmpty {
+            return u.path + ".txt"
+        }
+        return u.deletingPathExtension().appendingPathExtension("txt").path
+    }
+
+    /// 选择输出文件位置（默认预填同名 .txt）
+    func pickOutPath() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.plainText]
+        let name = outPath.isEmpty
+            ? (url?.deletingPathExtension().lastPathComponent ?? "ocr") + ".txt"
+            : (outPath as NSString).lastPathComponent
+        panel.nameFieldStringValue = name
+        let dir = outPath.isEmpty
+            ? url?.deletingLastPathComponent()
+            : URL(fileURLWithPath: (outPath as NSString).expandingTildeInPath).deletingLastPathComponent()
+        if let dir { panel.directoryURL = dir }
+        if panel.runModal() == .OK, let u = panel.url { outPath = u.path }
     }
 
     func pickFile() {
@@ -89,6 +129,9 @@ final class OCRModel: ObservableObject {
         }
         running = true
         text = ""
+        preview = ""
+        resultPath = ""
+        resultChars = 0
         log = ""
         buf = ""
         donePages = 0
@@ -102,6 +145,32 @@ final class OCRModel: ObservableObject {
         if !vote { args += ["--no-vote"] }
         if rotate != 0 { args += ["--rot", String(rotate)] }
         if wrap { args += ["--wrap", "76"] }
+
+        // 写文件模式：让 CLI 直接落盘，界面不缓存全文
+        toFile = writeToFile
+        if toFile {
+            let dest = outPath.trimmingCharacters(in: .whitespaces)
+            if dest.isEmpty {
+                running = false
+                status = "请填写输出路径"
+                return
+            }
+            let expanded = (dest as NSString).expandingTildeInPath
+            let parent = (expanded as NSString).deletingLastPathComponent
+            // 先校验目录，别等识别完才发现写不进去
+            if !FileManager.default.fileExists(atPath: parent) {
+                running = false
+                status = "输出目录不存在：\(parent)"
+                return
+            }
+            if !FileManager.default.isWritableFile(atPath: parent) {
+                running = false
+                status = "目录不可写：\(parent)"
+                return
+            }
+            args += ["-o", expanded]
+            resultPath = expanded
+        }
 
         let pages = expectedPages()
         let passes = (vote && url.pathExtension.lowercased() == "pdf") ? 3 : 1
@@ -121,6 +190,10 @@ final class OCRModel: ObservableObject {
         outPipe.fileHandleForReading.readabilityHandler = { [weak self] h in
             let d = h.availableData
             if d.isEmpty { h.readabilityHandler = nil; return }
+            if self?.toFile == true {
+                // 写文件模式：全文已由 CLI 落盘，这里只把管道读干，不做缓存
+                return
+            }
             DispatchQueue.main.async { self?.outData.append(d) }
         }
         errPipe.fileHandleForReading.readabilityHandler = { [weak self] h in
@@ -190,19 +263,42 @@ final class OCRModel: ObservableObject {
                 progress = min(0.98, Double(donePages) / Double(totalUnits))
                 status = line.hasPrefix("page ") ? "识别第 \(line.dropFirst(5)) 页…" : line
             }
+            // 写文件模式下 CLI 会报告「→ 路径 (N 字)」，取出字数
+            if toFile, line.hasPrefix("→ "),
+               let r = line.range(of: #"(\d+)\s*字"#, options: .regularExpression) {
+                let digits = line[r].prefix(while: { $0.isNumber })
+                resultChars = Int(digits) ?? 0
+            }
         }
         if log.count > 4000 { log = String(log.suffix(2000)) }
     }
 
     private func finish(_ rest: Data, code: Int32) {
+        let secs = String(format: "%.1f", Date().timeIntervalSince(started))
+        running = false
+        progress = 1
+
+        if toFile {
+            // CLI 已在 stderr 里报告「→ 路径 (N 字)」，consume() 已解析出来
+            let charsNote = resultChars > 0 ? " · \(resultChars) 字" : ""
+            if code == 0 && !resultPath.isEmpty {
+                preview = Self.headOfFile(resultPath, limit: previewLimit)
+                let name = (resultPath as NSString).lastPathComponent
+                status = "已保存 \(name)\(charsNote) · 用时 \(secs) 秒"
+            } else if code == 0 {
+                status = "没有识别到文字"
+            } else {
+                status = "识别失败（退出码 \(code)）"
+            }
+            proc = nil
+            return
+        }
+
         outData.append(rest)
         var s = String(data: outData, encoding: .utf8) ?? ""
         outData = Data()
         s = s.trimmingCharacters(in: .whitespacesAndNewlines)
         text = s
-        running = false
-        progress = 1
-        let secs = String(format: "%.1f", Date().timeIntervalSince(started))
         if code == 0 && !s.isEmpty {
             status = "完成 · \(s.count) 字 · 用时 \(secs) 秒"
         } else if code == 0 {
@@ -232,9 +328,40 @@ final class OCRModel: ObservableObject {
     }
 
     func copyAll() {
+        // 写文件模式复制整份文件；界面模式复制界面里的文本
+        let s = (!resultPath.isEmpty && FileManager.default.fileExists(atPath: resultPath))
+            ? Self.readFile(resultPath)
+            : text
+        guard !s.isEmpty else { return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        NSPasteboard.general.setString(s, forType: .string)
         status = "已复制到剪贴板"
+    }
+
+    func revealInFinder() {
+        guard !resultPath.isEmpty else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: resultPath)])
+    }
+
+    func openResult() {
+        guard !resultPath.isEmpty else { return }
+        NSWorkspace.shared.open(URL(fileURLWithPath: resultPath))
+    }
+
+    /// 只读文件前 limit 个字符做预览，不把整份文本读进内存渲染
+    static func headOfFile(_ path: String, limit: Int) -> String {
+        guard let h = FileHandle(forReadingAtPath: path) else { return "" }
+        defer { try? h.close() }
+        // UTF-8 一个字符最多 4 字节，多读一些再截，避免边界切断
+        let raw = (try? h.read(upToCount: max(limit * 4, 64))) ?? Data()
+        var s = String(decoding: raw, as: UTF8.self)
+        if s.count > limit { s = String(s.prefix(limit)) }
+        if s.hasSuffix("\u{FFFD}") { s.removeLast() }   // 边界切断产生的替换符
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func readFile(_ path: String) -> String {
+        (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
     }
 }
 
@@ -303,6 +430,35 @@ struct ContentView: View {
                     .font(.callout)
                 Toggle("按 76 字折行", isOn: $m.wrap)
                     .font(.callout)
+            }
+
+            // 结果去哪：默认写文件，避免大文本在界面里渲染卡顿
+            VStack(alignment: .leading, spacing: 8) {
+                Text("结果").font(.caption).fontWeight(.medium).foregroundStyle(.secondary)
+
+                Picker("", selection: $m.writeToFile) {
+                    Text("保存到文件").tag(true)
+                    Text("界面显示").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                if m.writeToFile {
+                    HStack(spacing: 6) {
+                        TextField("输出路径", text: $m.outPath)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.callout)
+                            .disabled(m.url == nil)
+                        Button("选择…") { m.pickOutPath() }
+                            .controlSize(.small)
+                            .disabled(m.url == nil)
+                    }
+                    Text("默认与源文件同名，存为 .txt")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                } else {
+                    Text("文本较大时界面可能卡顿")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
             }
 
             if m.running {
@@ -386,12 +542,19 @@ struct ContentView: View {
                 Spacer()
                 if !m.text.isEmpty {
                     Text("\(m.text.count) 字").font(.caption).foregroundStyle(.secondary)
+                } else if !m.preview.isEmpty && m.resultChars > 0 {
+                    Text("\(m.resultChars) 字").font(.caption).foregroundStyle(.secondary)
                 }
                 Button("复制") { m.copyAll() }
-                    .disabled(m.text.isEmpty)
-                Button("保存…") { m.save() }
-                    .disabled(m.text.isEmpty)
-                    .keyboardShortcut("s", modifiers: .command)
+                    .disabled(m.text.isEmpty && m.preview.isEmpty)
+                if m.writeToFile && !m.resultPath.isEmpty {
+                    Button("打开") { m.openResult() }
+                    Button("访达") { m.revealInFinder() }
+                } else {
+                    Button("保存…") { m.save() }
+                        .disabled(m.text.isEmpty)
+                        .keyboardShortcut("s", modifiers: .command)
+                }
                 if m.running {
                     Button("取消") { m.cancel() }
                 }
@@ -401,12 +564,46 @@ struct ContentView: View {
 
             Divider()
 
-            if m.text.isEmpty {
+            if m.running {
                 VStack(spacing: 10) {
                     Image(systemName: "text.viewfinder")
                         .font(.system(size: 38))
                         .foregroundStyle(.tertiary)
-                    Text(m.running ? "识别中…" : "结果会显示在这里")
+                    Text("识别中…")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if !m.preview.isEmpty {
+                // 写文件模式：只预览前若干字，附文件位置
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.text.fill")
+                                .foregroundStyle(Color.accentColor)
+                            Text(m.resultPath)
+                                .font(.callout)
+                                .lineLimit(2)
+                                .truncationMode(.middle)
+                                .textSelection(.enabled)
+                            Spacer(minLength: 0)
+                            Button("在访达中显示") { m.revealInFinder() }
+                                .controlSize(.small)
+                        }
+                        Text("以下为前 \(m.preview.count) 字预览：")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text(m.preview)
+                            .font(.system(size: 13, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .padding(14)
+                }
+            } else if m.text.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "text.viewfinder")
+                        .font(.system(size: 38))
+                        .foregroundStyle(.tertiary)
+                    Text("结果会显示在这里")
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -481,6 +678,10 @@ enum SelfTest {
         let m = OCRModel()
         m.load(URL(fileURLWithPath: path))
         m.vote = false
+        // OCRDISPLAY=1 → 界面显示模式；否则走默认的写文件模式
+        if ProcessInfo.processInfo.environment["OCRDISPLAY"] == "1" { m.writeToFile = false }
+        // OCROUT=路径 → 覆盖默认输出路径（用于校验路径检查）
+        if let o = ProcessInfo.processInfo.environment["OCROUT"] { m.outPath = o }
         if let pg = ProcessInfo.processInfo.environment["OCRPAGES"] {
             m.pageRange = pg
             m.vote = true
@@ -490,9 +691,16 @@ enum SelfTest {
         while m.running && Date() < deadline {
             RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         }
+        print("toFile: \(m.writeToFile)")
         print("status: \(m.status)")
         print("chars: \(m.text.count)")
         print("progress: \(m.progress)")
+        if !m.resultPath.isEmpty {
+            print("result: \(m.resultPath)")
+            print("resultChars: \(m.resultChars)")
+            print("previewCount: \(m.preview.count)")
+            print("preview: \(m.preview.prefix(40).replacingOccurrences(of: "\n", with: " | "))")
+        }
         print("head: \(m.text.prefix(60).replacingOccurrences(of: "\n", with: " | "))")
     }
 
@@ -512,19 +720,19 @@ enum SelfTest {
             m.pageCount = 0
             m.status = "把 PDF 或图片拖进来"
         }
-        m.text = """
-        《钱从哪里来7：重置》　香帅 著　新星出版社
-        收录：前言、第一章至第五章（原书第001—124页）
-
-        ==========================================================
-        第一章　资金的岛链化叙事
-        ==========================================================
-
-        岛链化叙事
-
-        “美国制造业回来了！”
-        2022年12月，在亚利桑那州凤凰城郊外沙漠的一个工厂里，时任美国总统的拜登（Biden）发出了这个激动的声音——台积电投资建设的晶圆厂正在举行盛大的首批设备搬入仪式。
-        """
+        if ProcessInfo.processInfo.environment["OCRSNAP"] == "display" {
+            // 界面显示模式
+            m.writeToFile = false
+            m.text = previewBody
+        } else {
+            // 默认的写文件模式
+            m.writeToFile = true
+            m.outPath = "/Users/macos/Downloads/钱从哪里来7_前五章.txt"
+            m.resultPath = m.outPath
+            m.resultChars = 68600
+            m.status = "已保存 钱从哪里来7_前五章.txt · 68600 字 · 用时 42.3 秒"
+            m.preview = previewBody
+        }
         let v = NSHostingView(rootView: ContentView(m: m))
         v.frame = CGRect(x: 0, y: 0, width: 960, height: 660)
         v.layoutSubtreeIfNeeded()
@@ -535,6 +743,21 @@ enum SelfTest {
             print("saved \(path)")
         }
     }
+
+    /// 截图用的示例文本
+    static let previewBody = """
+    《钱从哪里来7：重置》　香帅 著　新星出版社
+    收录：前言、第一章至第五章（原书第001—124页）
+
+    ==========================================================
+    第一章　资金的岛链化叙事
+    ==========================================================
+
+    岛链化叙事
+
+    “美国制造业回来了！”
+    2022年12月，在亚利桑那州凤凰城郊外沙漠的一个工厂里，时任美国总统的拜登（Biden）发出了这个激动的声音——台积电投资建设的晶圆厂正在举行盛大的首批设备搬入仪式。
+    """
 
     static func run(path: String) {
         guard let py = OCRModel.pythonPath(), let root = OCRModel.packageRoot() else {

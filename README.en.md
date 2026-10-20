@@ -42,7 +42,10 @@ open ~/Applications/AppleVisionOCR.app
 ![Interface](docs/screenshot.png)
 
 Drop in a PDF or image → pick the page range and output shape → start recognition → copy or save.
-`Cmd+O` opens a file, `Cmd+S` exports, `Cmd+R` starts; double-clicking a PDF in Finder also opens it in this app.
+
+Results are **written straight to a file by default**. The path is editable and defaults to the same name as the source file, with a `.txt` extension. Large texts are never rendered on screen, so the UI stays responsive: after a run you get the first 2,000 characters as a preview plus buttons to open the file or reveal it in Finder. Switch to 界面显示 if you would rather watch small results inline.
+
+`Cmd+O` opens a file, `Cmd+R` starts; double-clicking a PDF in Finder also opens it in this app.
 
 ### Command line
 
