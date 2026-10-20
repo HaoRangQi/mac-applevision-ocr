@@ -1,3 +1,5 @@
+> 🇨🇳 **中文** · 🇺🇸 [English](README.en.md)
+
 # applevision-ocr
 
 本地 OCR：把扫描版 PDF 和图片变成可读文本，中文段落、表格、脚注都能还原。
