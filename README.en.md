@@ -17,6 +17,7 @@ Built on macOS's built-in **Vision** framework — everything runs on your machi
 - **Chinese accuracy via multi-pass voting**: the same page is recognized at three resolutions and voted character by character to cancel out single-character misreads.
 - **Reconstructs layout**: splits paragraphs by indentation, continues across pages, turns tables into grids, moves footnotes to the end, and replaces figure captions with placeholders.
 - **Same engine, two front-ends**: the GUI `AppleVisionOCR.app` and the CLI `applevision-ocr` share one pipeline.
+- **Batch queue**: add many files at once, recognize them one by one, each written to its own `.txt`.
 
 ## Install
 
@@ -46,6 +47,10 @@ Drop in a PDF or image → pick the page range and output shape → start recogn
 Results are **written straight to a file by default**. The path is editable and defaults to the same name as the source file, with a `.txt` extension. Large texts are never rendered on screen, so the UI stays responsive: after a run you get the first 2,000 characters as a preview plus buttons to open the file or reveal it in Finder. Switch to 界面显示 if you would rather watch small results inline.
 
 `Cmd+O` opens a file, `Cmd+R` starts; double-clicking a PDF in Finder also opens it in this app.
+
+**Batch queue**: drop or select several PDFs / images at once and they line up in the left-hand queue, then run one after another. Each file shows its own state (waiting / running / done with N chars / failed) while the bar at the bottom tracks overall progress. Every file is saved as a same-named `.txt` by default, or into a single output directory you pick.
+
+![Batch queue](docs/screenshot-batch.png)
 
 ### Command line
 
